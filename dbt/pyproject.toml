@@ -1,0 +1,8 @@
+[project]
+name = "divvyai-dbt"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "dbt-core==1.12.6",
+    "dbt-bigquery==1.12.1",
+]

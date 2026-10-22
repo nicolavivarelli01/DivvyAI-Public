@@ -1,0 +1,60 @@
+version: 2
+
+unit_tests:
+  - name: groups_by_station_and_hour_and_preserves_unknown_counts
+    model: mart_station_hourly_availability
+    given:
+      - input: ref('fct_station_snapshots')
+        format: sql
+        rows: |
+          SELECT
+              fixture.capture_id,
+              fixture.station_id,
+              fixture.status_received_at,
+              TIMESTAMP_SUB(
+                  fixture.status_received_at, INTERVAL 1 SECOND
+              ) AS information_received_at,
+              TRUE AS has_station_information,
+              'Synthetic station' AS station_name,
+              41.875 AS latitude,
+              -87.625 AS longitude,
+              20 AS capacity,
+              fixture.bikes_available,
+              fixture.docks_available
+          FROM (
+              SELECT
+                  'capture-a' AS capture_id,
+                  '001' AS station_id,
+                  TIMESTAMP '2026-10-09 14:00:00+00' AS status_received_at,
+                  0 AS bikes_available,
+                  CAST(NULL AS INT64) AS docks_available
+              UNION ALL
+              SELECT 'capture-b', '001',
+                  TIMESTAMP '2026-10-09 14:20:00+00', 4, 2
+              UNION ALL
+              SELECT 'capture-c', '001',
+                  TIMESTAMP '2026-10-09 15:00:00+00',
+                  CAST(NULL AS INT64), 0
+              UNION ALL
+              SELECT 'capture-a', '002',
+                  TIMESTAMP '2026-10-09 14:00:00+00', 6, 8
+          ) AS fixture
+    expect:
+      format: sql
+      rows: |
+        SELECT
+            '001' AS station_id,
+            TIMESTAMP '2026-10-09 14:00:00+00' AS hour_started_at_utc,
+            2 AS snapshot_count,
+            2 AS bike_sample_count,
+            1 AS dock_sample_count,
+            2.0 AS avg_bikes_available,
+            2.0 AS avg_docks_available
+        UNION ALL
+        SELECT
+            '001', TIMESTAMP '2026-10-09 15:00:00+00',
+            1, 0, 1, CAST(NULL AS FLOAT64), 0.0
+        UNION ALL
+        SELECT
+            '002', TIMESTAMP '2026-10-09 14:00:00+00',
+            1, 1, 1, 6.0, 8.0

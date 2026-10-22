@@ -1,0 +1,57 @@
+version: 2
+
+unit_tests:
+  - name: information_fields_and_filters
+    model: stg_station_information
+    given:
+      - input: source('divvy', 'station_records')
+        format: sql
+        rows: |
+          SELECT
+              'fixture-capture' AS capture_id,
+              'raw/fixture.zip' AS archive_object_name,
+              fixture.feed_name,
+              'https://example.test/feed' AS source_url,
+              TIMESTAMP '2026-10-09 14:00:00+00' AS received_at,
+              fixture.station_id,
+              JSON '{}' AS feed_metadata,
+              fixture.payload,
+              CASE
+                  WHEN fixture.station_id = '004'
+                      THEN DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+                  ELSE CURRENT_DATE()
+              END AS _PARTITIONDATE
+          FROM (
+              SELECT
+                  '001' AS station_id,
+                  'station_information' AS feed_name,
+                  JSON '{"name":"Synthetic café station","lat":41.875,"lon":-87.625,"capacity":10}' AS payload
+              UNION ALL
+              SELECT '002', 'station_information',
+                  JSON '{"lon":"invalid","capacity":"invalid"}'
+              UNION ALL
+              SELECT '003', 'station_status',
+                  JSON '{"name":"Wrong feed","lat":1,"lon":2,"capacity":99}'
+              UNION ALL
+              SELECT '004', 'station_information',
+                  JSON '{"name":"Previous day","lat":40,"lon":-88,"capacity":20}'
+          ) AS fixture
+    expect:
+      format: sql
+      rows: |
+        SELECT
+            'fixture-capture' AS capture_id,
+            '001' AS station_id,
+            TIMESTAMP '2026-10-09 14:00:00+00' AS received_at,
+            'Synthetic café station' AS station_name,
+            41.875 AS latitude,
+            -87.625 AS longitude,
+            10 AS capacity
+        UNION ALL
+        SELECT
+            'fixture-capture', '002',
+            TIMESTAMP '2026-10-09 14:00:00+00',
+            CAST(NULL AS STRING),
+            CAST(NULL AS FLOAT64),
+            CAST(NULL AS FLOAT64),
+            CAST(NULL AS INT64)

@@ -1,0 +1,5 @@
+name: divvyai
+version: "0.1.0"
+config-version: 2
+profile: divvyai
+model-paths: ["models"]

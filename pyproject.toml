@@ -1,0 +1,45 @@
+[project]
+name = "divvyai"
+version = "0.1.0"
+description = "A Google Cloud data pipeline for Chicago Divvy station availability."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "google-cloud-bigquery>=3.46.1,<4",
+    "google-cloud-storage>=3.17,<4",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18,<2",
+    "pytest>=8.4,<10",
+    "ruff>=0.14,<1",
+]
+
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/divvyai"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tests"]
+untyped_calls_exclude = ["google.api_core.exceptions"]
+
+[[tool.mypy.overrides]]
+module = ["google.cloud.storage", "google.cloud.storage.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

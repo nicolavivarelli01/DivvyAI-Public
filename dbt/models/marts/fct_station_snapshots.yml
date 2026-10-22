@@ -1,0 +1,74 @@
+version: 2
+
+unit_tests:
+  - name: joins_same_capture_and_preserves_missing_information
+    model: fct_station_snapshots
+    given:
+      - input: ref('stg_station_status')
+        format: sql
+        rows: |
+          SELECT
+              'capture-a' AS capture_id,
+              '001' AS station_id,
+              TIMESTAMP '2026-10-09 14:00:02+00' AS received_at,
+              3 AS bikes_available,
+              7 AS docks_available
+          UNION ALL
+          SELECT 'capture-b', '001',
+              TIMESTAMP '2026-10-09 14:15:02+00', 1, 9
+          UNION ALL
+          SELECT 'capture-a', '002',
+              TIMESTAMP '2026-10-09 14:00:02+00', 0, 5
+
+      - input: ref('stg_station_information')
+        format: sql
+        rows: |
+          SELECT
+              'capture-a' AS capture_id,
+              '001' AS station_id,
+              TIMESTAMP '2026-10-09 14:00:01+00' AS received_at,
+              'Original name' AS station_name,
+              41.875 AS latitude,
+              -87.625 AS longitude,
+              10 AS capacity
+          UNION ALL
+          SELECT 'capture-b', '001',
+              TIMESTAMP '2026-10-09 14:15:01+00',
+              'Updated name', 41.875, -87.625, 10
+          UNION ALL
+          SELECT 'capture-a', '003',
+              TIMESTAMP '2026-10-09 14:00:01+00',
+              'Different station', 42.0, -88.0, 20
+
+    expect:
+      format: sql
+      rows: |
+        SELECT
+            'capture-a' AS capture_id,
+            '001' AS station_id,
+            TIMESTAMP '2026-10-09 14:00:02+00' AS status_received_at,
+            TIMESTAMP '2026-10-09 14:00:01+00' AS information_received_at,
+            TRUE AS has_station_information,
+            'Original name' AS station_name,
+            41.875 AS latitude,
+            -87.625 AS longitude,
+            10 AS capacity,
+            3 AS bikes_available,
+            7 AS docks_available
+        UNION ALL
+        SELECT
+            'capture-b', '001',
+            TIMESTAMP '2026-10-09 14:15:02+00',
+            TIMESTAMP '2026-10-09 14:15:01+00',
+            TRUE, 'Updated name', 41.875, -87.625, 10, 1, 9
+        UNION ALL
+        SELECT
+            'capture-a', '002',
+            TIMESTAMP '2026-10-09 14:00:02+00',
+            CAST(NULL AS TIMESTAMP),
+            FALSE,
+            CAST(NULL AS STRING),
+            CAST(NULL AS FLOAT64),
+            CAST(NULL AS FLOAT64),
+            CAST(NULL AS INT64),
+            0, 5

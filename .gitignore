@@ -218,3 +218,29 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# DivvyAI local secrets and authentication state
+.env.*
+!.env.example
+/.secrets/
+/credentials/
+application_default_credentials.json
+*service-account*.json
+*service_account*.json
+*.pem
+*.key
+.dbt/
+profiles.yml
+
+# Local captures and generated artifacts; test fixtures remain tracked
+/data/
+/artifacts/
+/outputs/
+
+# dbt generated files
+dbt/**/target/
+dbt/**/logs/
+dbt/**/dbt_packages/
+
+# macOS Finder metadata
+.DS_Store

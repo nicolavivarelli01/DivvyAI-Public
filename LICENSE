@@ -1,0 +1,32 @@
+Copyright (c) 2026 Nick Vivarelli. All rights reserved.
+
+This repository and all of its contents, including source code, SQL, dbt
+models, configuration, documentation and images (the "Software"), are the
+proprietary work of the copyright holder.
+
+The Software is made publicly visible solely so that it can be viewed and
+evaluated, for example by prospective employers or reviewers. Viewing the
+Software on GitHub, and the forking permitted by the GitHub Terms of Service
+within GitHub, does not grant any other right.
+
+Without prior written permission from the copyright holder, you may not:
+
+  1. copy, reproduce or redistribute the Software, in whole or in part;
+  2. modify, adapt, translate or create derivative works from the Software;
+  3. use the Software, or any part of it, in any other project, product or
+     service, whether commercial or non-commercial;
+  4. sublicense, sell, rent or otherwise transfer the Software; or
+  5. use the Software, or any part of it, to train or evaluate machine
+     learning models.
+
+Third-party data and dependencies referenced by the Software remain subject
+to their own licenses and terms, including the Divvy data license agreement.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+For permission requests, contact the copyright holder through GitHub:
+https://github.com/nicolavivarelli01

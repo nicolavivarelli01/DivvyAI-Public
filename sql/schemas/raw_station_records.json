@@ -1,0 +1,10 @@
+[
+  {"name": "capture_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "archive_object_name", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "feed_name", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "source_url", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "received_at", "type": "TIMESTAMP", "mode": "REQUIRED"},
+  {"name": "station_id", "type": "STRING", "mode": "REQUIRED"},
+  {"name": "feed_metadata", "type": "JSON", "mode": "REQUIRED"},
+  {"name": "payload", "type": "JSON", "mode": "REQUIRED"}
+]

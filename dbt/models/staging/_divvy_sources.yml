@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: divvy
+    database: "{{ target.database }}"
+    schema: divvyai_raw
+    tables:
+      - name: station_records
+        config:
+          loaded_at_field: received_at
+          freshness:
+            warn_after:
+              count: 30
+              period: minute
+            error_after:
+              count: 60
+              period: minute
+            filter: >
+              _PARTITIONDATE BETWEEN
+                DATE_SUB(CURRENT_DATE('UTC'), INTERVAL 1 DAY)
+                AND CURRENT_DATE('UTC')

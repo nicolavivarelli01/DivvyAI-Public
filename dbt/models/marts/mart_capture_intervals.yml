@@ -1,0 +1,87 @@
+version: 2
+
+unit_tests:
+  - name: measures_intervals_per_feed_across_midnight
+    model: mart_capture_intervals
+    given:
+      - input: source('divvy', 'station_records')
+        format: sql
+        rows: |
+          SELECT
+              fixture.capture_id,
+              'raw/fixture.zip' AS archive_object_name,
+              fixture.feed_name,
+              'https://example.test/feed' AS source_url,
+              TIMESTAMP_ADD(
+                  TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'),
+                  INTERVAL fixture.minute_offset MINUTE
+              ) AS received_at,
+              fixture.station_id,
+              JSON '{}' AS feed_metadata,
+              JSON '{}' AS payload,
+              DATE_SUB(
+                  CURRENT_DATE('UTC'),
+                  INTERVAL fixture.ingestion_days_ago DAY
+              ) AS _PARTITIONDATE
+          FROM (
+              SELECT
+                  'a-new' AS capture_id,
+                  'station_status' AS feed_name,
+                  8 AS minute_offset,
+                  '001' AS station_id,
+                  0 AS ingestion_days_ago
+              UNION ALL
+              SELECT 'z-old', 'station_information', -10, '001', 1
+              UNION ALL
+              SELECT 'z-old', 'station_status', -9, '001', 1
+              UNION ALL
+              SELECT 'a-new', 'station_information', 5, '001', 0
+              UNION ALL
+              SELECT 'z-old', 'station_status', -9, '002', 1
+              UNION ALL
+              SELECT 'old-partition', 'station_status', 0, '001', 2
+              UNION ALL
+              SELECT 'old-receipt', 'station_status', -2880, '001', 0
+              UNION ALL
+              SELECT 'other-feed', 'station_alerts', 0, '001', 0
+          ) AS fixture
+    expect:
+      format: sql
+      rows: |
+        SELECT
+            'station_information' AS feed_name,
+            'z-old' AS capture_id,
+            TIMESTAMP_SUB(
+                TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'),
+                INTERVAL 10 MINUTE
+            ) AS capture_received_at,
+            CAST(NULL AS TIMESTAMP) AS previous_received_at,
+            1 AS station_record_count,
+            CAST(NULL AS FLOAT64) AS gap_minutes
+        UNION ALL
+        SELECT
+            'station_information', 'a-new',
+            TIMESTAMP_ADD(
+                TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'), INTERVAL 5 MINUTE
+            ),
+            TIMESTAMP_SUB(
+                TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'), INTERVAL 10 MINUTE
+            ),
+            1, 15.0
+        UNION ALL
+        SELECT
+            'station_status', 'z-old',
+            TIMESTAMP_SUB(
+                TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'), INTERVAL 9 MINUTE
+            ),
+            CAST(NULL AS TIMESTAMP), 2, CAST(NULL AS FLOAT64)
+        UNION ALL
+        SELECT
+            'station_status', 'a-new',
+            TIMESTAMP_ADD(
+                TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'), INTERVAL 8 MINUTE
+            ),
+            TIMESTAMP_SUB(
+                TIMESTAMP(CURRENT_DATE('UTC'), 'UTC'), INTERVAL 9 MINUTE
+            ),
+            1, 17.0
