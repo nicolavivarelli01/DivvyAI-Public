@@ -1,6 +1,6 @@
-# DivvyAI
+# DivvyAI 🚲
 
-A small data engineering project for Chicago Divvy bike-share availability,
+App for Chicago Divvy bike-share availability,
 running on Google Cloud.
 
 ## Current status
