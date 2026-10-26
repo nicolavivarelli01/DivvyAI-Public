@@ -1,0 +1,13 @@
+divvyai:
+  target: checks
+  outputs:
+    checks:
+      type: bigquery
+      method: oauth
+      project: divvy-ai
+      dataset: divvyai_analytics
+      location: us-central1
+      threads: 1
+      maximum_bytes_billed: 268435456
+      job_retries: 0
+      job_execution_timeout_seconds: 60

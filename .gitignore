@@ -242,5 +242,7 @@ dbt/**/target/
 dbt/**/logs/
 dbt/**/dbt_packages/
 
-# macOS Finder metadata
+# macOS folder metadata
 .DS_Store
+
+!/config/dbt-checks/profiles.yml

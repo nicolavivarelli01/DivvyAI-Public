@@ -1,0 +1,38 @@
+[project]
+name = "divvyai-ai"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "google-cloud-bigquery>=3.46.1,<4",
+    "mcp==2.1.1",
+    "pydantic>=2.11,<3",
+    "strands-agents[openai]==1.62.0",
+    "starlette==1.10.0",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18,<2",
+    "pytest>=8.4,<10",
+    "ruff>=0.14,<1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+untyped_calls_exclude = ["google.api_core.exceptions"]

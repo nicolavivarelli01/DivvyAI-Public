@@ -1,6 +1,8 @@
 # Missed collection: October 18, 2026
 
 Investigation recorded: 2026-10-19 UTC. All event times below are UTC.
+Documentation reviewed October 25, 2026; the historical findings are unchanged.
+No new live investigation was performed for this documentation refresh.
 
 ## Impact
 
@@ -44,14 +46,28 @@ A temporary authentication failure in the image-import path is consistent with
 the evidence. Why valid credentials were missing or rejected is unconfirmed.
 This is not evidence of a confirmed Google outage or a specific credential bug.
 
-The investigation's current IAM snapshot showed roles/run.serviceAgent on
-service-576327842002@serverless-robot-prod.iam.gserviceaccount.com. That role
-includes Artifact Registry read/download permissions. Current IAM does not prove
-historical permissions or every effective access constraint.
+The IAM snapshot taken during the investigation showed roles/run.serviceAgent
+on service-576327842002@serverless-robot-prod.iam.gserviceaccount.com. That role
+includes Artifact Registry read/download permissions. A later IAM snapshot
+does not prove permissions at the failure time or every effective access
+constraint.
 
 No application, permission or retry change was made as part of this investigation.
 The next scheduled collection succeeded; the missed historical observation
 remains missing. Manual archive replay cannot recover data never fetched.
+
+## Later monitoring and agent context
+
+Hourly warehouse checks and failed-execution email alerts were verified on
+October 24; they do not change the explanation of this earlier incident.
+The read-only MCP gap tool uses the recent capture-interval view, so it cannot
+now retrieve this October 18 event. Its default threshold is at least 30
+minutes; this recorded receipt interval of about 29.98 minutes would also fall
+below that threshold. Scheduled execution failure and measured receipt interval
+are related evidence, but they are not the same test.
+
+See the [runbook](RUNBOOK.md) for current operating procedures and
+[project state](PROJECT_STATE.md) for the subsequent verified milestones.
 
 ## Evidence and limits
 

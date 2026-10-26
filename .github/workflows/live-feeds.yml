@@ -1,0 +1,31 @@
+name: Live feed check
+
+on:
+  schedule:
+    - cron: "17 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-feeds:
+    name: Real Divvy feeds
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DIVVYAI_LIVE_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      # Two public HTTP requests; no Google Cloud access or credentials.
+      - name: Live feed integration test
+        run: uv run pytest tests/test_live_feeds.py -v

@@ -1,0 +1,15 @@
+**
+!Dockerfile.agent
+!Dockerfile.agent.dockerignore
+
+!ai/
+!ai/pyproject.toml
+!ai/uv.lock
+!ai/hosted_web.py
+!ai/local_web.py
+!ai/agent.py
+!ai/server.py
+!ai/models.py
+!ai/history.py
+!ai/gaps.py
+!ai/ranking.py

@@ -1,0 +1,34 @@
+FROM python:3.12-slim-bookworm AS builder
+
+COPY --from=ghcr.io/astral-sh/uv:0.11.32 /uv /usr/local/bin/uv
+
+WORKDIR /app/dbt
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+
+COPY dbt/pyproject.toml dbt/uv.lock ./
+RUN uv sync --locked --no-dev --no-install-project --no-cache
+
+
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DBT_SEND_ANONYMOUS_USAGE_STATS=false \
+    DBT_TARGET_PATH=/tmp/dbt-target \
+    DBT_LOG_PATH=/tmp/dbt-logs
+
+COPY --from=builder /app/.venv /app/.venv
+
+COPY src/divvyai/dbt_checks.py /app/dbt_checks.py
+COPY dbt/dbt_project.yml /app/dbt/dbt_project.yml
+COPY dbt/models /app/dbt/models
+COPY dbt/tests /app/dbt/tests
+COPY config/dbt-checks/profiles.yml /app/config/profiles.yml
+
+USER 10001:10001
+
+ENTRYPOINT ["python", "/app/dbt_checks.py"]
+CMD ["--project-dir", "/app/dbt", "--profiles-dir", "/app/config"]

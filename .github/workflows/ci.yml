@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Collector lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy src tests
+
+      - name: Pytest (offline)
+        run: uv run pytest
+
+      - name: Offline fixture demo
+        run: uv run python -m divvyai.local --output-dir "$RUNNER_TEMP/demo"
+
+  ai:
+    name: AI project lint, types and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          enable-cache: true
+          cache-dependency-glob: ai/uv.lock
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run --locked ruff check .
+
+      - name: Ruff format
+        run: uv run --locked ruff format --check .
+
+      - name: Mypy
+        run: uv run --locked mypy *.py tests
+
+      # Offline: synthetic model responses; no OpenAI or BigQuery calls.
+      - name: Pytest (offline)
+        run: uv run --locked pytest -q
+
+      - name: MCP tool discovery
+        run: uv run --locked python agent.py --list-tools
+
+  containers:
+    name: Container builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build collector image
+        run: docker build --platform linux/amd64 -t divvyai-collector:ci .
+
+      # --help exits before any Google Cloud client is created, so no
+      # credentials are needed; it proves the image installs and imports.
+      - name: Smoke test collector entry point
+        run: docker run --rm divvyai-collector:ci --help
+
+      - name: Build dbt checker image
+        run: >-
+          docker build --platform linux/amd64
+          -f Dockerfile.dbt-checks -t divvyai-dbt-checks:ci .
+
+      - name: Smoke test dbt checker entry point
+        run: docker run --rm divvyai-dbt-checks:ci --help
+
+      - name: Build agent image
+        run: >-
+          docker build --platform linux/amd64
+          -f Dockerfile.agent -t divvyai-agent:ci .
+
+      # Import only: starting the server would need model and cloud settings.
+      - name: Smoke test agent modules
+        run: >-
+          docker run --rm --entrypoint python divvyai-agent:ci
+          -c "import hosted_web, server, agent; print('agent image imports ok')"

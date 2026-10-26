@@ -1,0 +1,32 @@
+{
+  "displayName": "DivvyAI job failure",
+  "enabled": false,
+  "combiner": "OR",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "A DivvyAI collector or data checker execution failed. Open https://console.cloud.google.com/run/jobs?project=divvy-ai and inspect the failed execution and its logs."
+  },
+  "conditions": [
+    {
+      "displayName": "Collector or checker execution failed",
+      "conditionThreshold": {
+        "filter": "resource.type=\"cloud_run_job\" AND metric.type=\"run.googleapis.com/job/completed_execution_count\" AND resource.labels.project_id=\"divvy-ai\" AND resource.labels.location=\"us-central1\" AND resource.labels.job_name=monitoring.regex.full_match(\"divvyai-(collector|dbt-checks)\") AND metric.labels.result=\"failed\"",        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "aggregations": [
+          {
+            "alignmentPeriod": "300s",
+            "perSeriesAligner": "ALIGN_SUM"
+          }
+        ],
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationPrompts": ["OPENED"],
+    "autoClose": "1800s"
+  }
+}
