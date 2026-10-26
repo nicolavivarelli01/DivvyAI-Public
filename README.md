@@ -3,285 +3,233 @@
 [![CI](https://github.com/nicolavivarelli01/DivvyAI-Public/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nicolavivarelli01/DivvyAI-Public/actions/workflows/ci.yml)
 [![Live feed check](https://github.com/nicolavivarelli01/DivvyAI-Public/actions/workflows/live-feeds.yml/badge.svg?branch=main)](https://github.com/nicolavivarelli01/DivvyAI-Public/actions/workflows/live-feeds.yml)
 
-A Python data pipeline for Chicago Divvy bike-share availability on Google
-Cloud, with read-only MCP tools and a local tool-calling agent.
+DivvyAI collects Chicago Divvy bike-share availability every 15 minutes on
+Google Cloud, models it with dbt in BigQuery, and lets you ask questions about
+it in plain English through an AI agent.
 
-Documentation reviewed October 25, 2026 (America/Chicago). Cloud settings below
-reflect recorded acceptance checkpoints. The initial agent benchmark and usage
-audit below do not establish current cloud configuration or invoice totals.
+Ask *"Which downtown stations ran out of bikes most often around 8 a.m. on
+weekdays?"* or *"Were there any gaps in data collection yesterday?"*. The agent
+picks one of three read-only data tools, queries BigQuery, and answers from the
+returned numbers, showing which tool it called and with what arguments.
 
-## Current status
+The agent is deployed on Cloud Run and is reachable from the project website,
+[divvyai-weld.vercel.app](https://divvyai-weld.vercel.app). Asking questions
+there is invite-only.
 
-Cloud Scheduler triggers a containerized Cloud Run Job every 15 minutes.
-The collector fetches both public Divvy station feeds, archives their original
-response bytes and a manifest in one ZIP in Cloud Storage, and batch-loads
-station records into an ingestion-partitioned BigQuery table.
-
-Five dbt views organize the records into station status, station information,
-station snapshots, hourly sampled availability and per-feed capture intervals.
-All five model-specific builds and synthetic unit tests passed on BigQuery.
-Python tests run offline.
-
-A separate Cloud Run Job now runs the existing receipt-freshness and
-snapshot-quality checks hourly, at 10 minutes past each UTC hour. Cloud
-Monitoring watches failed executions of both the collector and the checker.
-On October 24, a controlled checker failure produced an email notification;
-manual and scheduled checker executions also passed. These are verification
-checkpoints, not an uptime measurement or proof of every future notification.
-
-The [demo](docs/DEMO.md) includes a recorded Data Studio chart, PDF and 24-row
-CSV for one station on October 21. The report uses a manually uploaded CSV and
-does not refresh automatically.
-
-The staging, snapshot and hourly views currently read the current UTC ingestion
-day. The interval view uses today and yesterday in UTC. Sample averages describe
-observations, not continuous availability or guaranteed collection coverage.
-
-One observed collection gap was traced to a pre-start image-import HTTP 401
-failure on October 18. Adjacent executions using the same image succeeded;
-the underlying authentication cause remains unconfirmed. See the
-[incident report](docs/INCIDENT_2026-10-18_IMAGE_IMPORT.md).
-
-Scheduled ingestion, tested dbt analytics, scheduled checks, manual archive
-recovery and a recorded demo are implemented within their documented scope.
-
-An isolated [AI project](ai/README.md) now exposes three read-only MCP tools and
-a Strands agent using OpenAI gpt-6-luna. Manual live availability, ranking and
-gap questions have returned tool-backed answers. JSON run reports preserve the
-actual tool calls, returned observations, answer and SDK-reported token usage.
-The initial 20-question benchmark passed 19/20 cases (95%): availability 6/6,
-ranking 8/8 and capture gaps 5/6. All 19 completed cases matched independent SQL
-for tool arguments, returned data and final answers. One gap case recorded an
-API timeout after 60.65 seconds. The result combines six saved availability
-runs with 14 new attempts. See [project state](docs/PROJECT_STATE.md) for evidence.
-
-A separate static website lives in DivvyAI-Website. Its model-testing page was
-published on Vercel. The local Python bridge in ai/local_web.py and its
-explicit dependencies are committed. On October 25, the current AI checkout
-passed 160 offline tests, Ruff, formatting and strict mypy. A live local-browser
-availability answer matched the recorded SQL values, with one successful tool
-call. The website-to-agent cloud connection and a hosted agent service are
-not deployed.
-The existing concept homepage is intentionally retained as a mock.
-
-Forecasting, automatic recovery and automatic dashboard refresh are not
-implemented. The project does not claim guaranteed delivery, complete
-missing-execution detection, continuous station availability or prediction
-quality.
-
-## Pipeline
+## How it works
 
 ```text
-Cloud Scheduler (every 15 minutes)
-    |
-Cloud Run collector <- Divvy GBFS feeds
-    |
-    +-> Cloud Storage: original responses in one ZIP/capture
-    |
-    +-> BigQuery: raw station rows
-            |
-         dbt views -> station snapshots and hourly sampled availability
-
-Recorded demo: bounded historical raw-data CSV export -> manual Data Studio upload
-
-Cloud Scheduler (hourly at :10 UTC)
-    |
-Cloud Run checker -> dbt receipt-freshness and snapshot-quality checks
-
-Cloud Monitoring -> email when a collector or checker execution fails
-
-Local AI path (separate from scheduled collection):
-website model-testing page -> Python /api/agent -> Strands agent
-                                                   |       |
-                                             OpenAI model  MCP tools -> BigQuery
+            ┌──────────────────────── Collect ────────────────────────┐
+Divvy GBFS  │  Cloud Scheduler (every 15 min) -> Cloud Run Job         │
+  feeds ───►│     ├─► Cloud Storage: original responses, one ZIP each  │
+            │     └─► BigQuery: raw station rows (batch load)          │
+            └──────────────────────────┬──────────────────────────────┘
+                                       │
+            ┌──────────────────────── Model ──────────────────────────┐
+            │  dbt views: station snapshots, hourly availability,      │
+            │  collection intervals                                    │
+            │  Hourly Cloud Run checker: freshness + data quality      │
+            │  Cloud Monitoring: email when a job fails                │
+            └──────────────────────────┬──────────────────────────────┘
+                                       │
+            ┌───────────────────────── Ask ───────────────────────────┐
+Website ───►│  Vercel function (login + allow list)                    │
+(Firebase   │     └─► Cloud Run service (IAM-protected)                │
+ login)     │           └─► Strands agent ──► OpenAI model             │
+            │                  └─► MCP server: 3 read-only tools ──► BigQuery
+            └─────────────────────────────────────────────────────────┘
 ```
 
-The agent chooses tools for each submitted question; it is not another scheduled
-collection job. The current MCP transport runs as a local subprocess. The
-planned hosted version places the Python API, agent and tools in a separate
-Cloud Run service while the website stays on Vercel and the model stays at
-OpenAI. That deployment is future work.
+### 1. Collect
 
-The collector archives original inputs before parsing station records and
-loading BigQuery. Manual recovery uses a saved archive and its original
-load-job ID. Replay cannot recreate observations that were never collected.
-Reusing an existing completed load does not reload its rows, even if they have
-expired. Expired-data restoration is not a supported recovery workflow.
+A Cloud Run Job runs every 15 minutes. It fetches Divvy's two public GBFS feeds,
+`station_information` and `station_status`. It saves the original response bytes
+and a manifest as one ZIP per capture in Cloud Storage, then batch-loads one row
+per station into an ingestion-partitioned BigQuery table.
 
-All five dbt models are views and reflect matching raw rows when queried.
-The hourly checker tests the existing data; it does not rebuild the views.
-Model changes and synthetic transformation tests are run explicitly during
-development. Prediction remains later work requiring sufficient observed
-history, point-in-time feature availability and a measured baseline.
+- The original bytes are archived before anything is parsed, so every row can be
+  traced back to the exact response it came from.
+- Captures have stable IDs, so a saved archive can be replayed manually without
+  adding duplicate rows.
+- Each row keeps the source URL and its UTC receipt time. Source time, receipt
+  time and warehouse availability are kept distinct.
 
-## Local setup
+### 2. Model
 
-Requirements: Git, uv, and Python 3.12. Run from the repository root:
+Five dbt views turn raw JSON into typed staging tables, station snapshots,
+hourly sampled availability and per-feed collection intervals. Each view has a
+synthetic unit test.
+
+A second Cloud Run Job runs every hour. It checks that new data is still
+arriving (receipt freshness) and that snapshots are well formed (keys,
+uniqueness, non-negative counts). Cloud Monitoring emails an alert when either
+job fails. That alert was tested end to end with a controlled failure.
+
+### 3. Ask
+
+The [`ai/`](ai/README.md) project contains an MCP server and a tool-calling
+agent built with [Strands Agents](https://strandsagents.com/).
+
+| MCP tool | What it answers |
+|---|---|
+| `get_station_availability` | Hourly average bikes and docks, with sample counts, for one station over up to seven days |
+| `find_capture_gaps` | Recent intervals where data collection paused longer than a threshold |
+| `rank_stations` | Stations most often out of bikes or docks, or with the lowest averages, at a given Chicago hour over recent days |
+
+- The tools run fixed, parameterized SQL. The model chooses a tool and its
+  arguments, but never writes SQL.
+- Each question is limited to three model calls and two tool calls. Every
+  BigQuery query has a 256 MiB billing cap, and a historical or ranking tool
+  call is capped at 1 GiB.
+- A run can be saved as a JSON report with the actual tool calls, returned
+  data, final answer and token usage.
+
+The agent is hosted as a private Cloud Run service. It requires IAM
+authentication, scales to zero and runs at most one instance. The OpenAI key
+lives in Secret Manager.
+
+The website lives in a separate repository. It calls the agent through a
+server-side Vercel function. That function first checks the visitor's Firebase
+login and their entry on a Firestore allow list. It then exchanges Vercel's
+OIDC token for a Google ID token through Workload Identity Federation. No
+service-account keys exist anywhere in the system.
+
+## Results
+
+- **Agent benchmark: 19/20 (95%).** On a fixed set of 20 questions
+  (availability 6/6, ranking 8/8, collection gaps 5/6), every completed answer
+  used the expected tool and arguments. Its data and final answer matched an
+  independent SQL reference. The one failure was an OpenAI API timeout; it was
+  scored as a failure, not retried.
+- **Hosted path verified.**
+  - An authenticated question to the Cloud Run service matched its SQL
+    reference.
+  - Unauthenticated requests were rejected.
+  - A question asked from a phone was answered with the development machine off.
+- **Access control verified.** The Firestore rules passed seven rule tests. An
+  allow-listed account got an answer, and an account not on the list was
+  refused.
+- **Replay verified.** Replaying a completed capture reused the original load
+  job and added no rows.
+- **One real incident investigated.** A missed collection on October 18 was
+  traced to a container-image pull failure before the job started. See the
+  [incident report](docs/INCIDENT_2026-10-18_IMAGE_IMPORT.md).
+
+The evidence and its limits are recorded in
+[docs/PROJECT_STATE.md](docs/PROJECT_STATE.md).
+
+## Run it locally
+
+Requirements: Git, [uv](https://docs.astral.sh/uv/) and Python 3.12. None of
+the commands below need cloud credentials or an API key.
+
+**Collector**, from the repository root:
 
 ```bash
 uv sync --locked
 uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy src tests
-```
-
-The Python tests use synthetic fixtures and mocked HTTP/cloud boundaries;
-they do not call live feeds or Google Cloud. dbt tests execute SQL on BigQuery
-and are separate from this offline suite. See the [dbt guide](dbt/README.md)
-for its separate environment, check runner and cloud configuration.
-
-Run the offline demo:
-
-```bash
 uv run python -m divvyai.local
 ```
 
-Expect four raw rows, a ZIP under data/demo/raw/, and a JSONL file under
-data/demo/warehouse/.
+The demo uses synthetic fixtures and makes no network requests. It writes a ZIP
+archive under `data/demo/raw/` and a JSONL load file under `data/demo/warehouse/`.
+Add `--live` to fetch the real Divvy feeds instead; nothing is uploaded.
 
-To fetch current Divvy data explicitly:
+**AI project**, which has its own environment:
 
 ```bash
-uv run python -m divvyai.local --live
+cd ai
+uv sync --locked
+uv run --locked pytest -q
+uv run --locked python agent.py --list-tools
 ```
 
-This makes two public HTTP requests and saves outputs under data/live/.
-The row count depends on the published feeds. It does not upload to Google Cloud.
+The tests use synthetic model responses and never call OpenAI or BigQuery.
+Asking the agent real questions needs Google credentials and an OpenAI API key;
+see the [AI guide](ai/README.md).
 
-Both modes print receipt times, the row count, and output paths.
-Generated data is ignored by Git.
-
-Run the opt-in integration test against the real public feeds:
+**Live-feed integration test**, opt-in:
 
 ```bash
 DIVVYAI_LIVE_TESTS=1 uv run pytest tests/test_live_feeds.py -v
 ```
 
-It fetches both feeds, checks that the archive preserves their original bytes,
-and prepares warehouse rows. It does not upload to Google Cloud.
+This fetches both real feeds and checks that archiving preserves their original
+bytes and that warehouse rows can be built from them.
 
-uv installs the package and development tools into an ignored local environment
-(.venv by default). uv.lock records resolved dependency versions.
-
-## MCP tools and agent
-
-| Tool | What it returns | Window |
-|---|---|---|
-| get_station_availability | Hourly sampled bikes/docks and sample counts for an exact station ID | Up to seven days, starting within the previous seven UTC days or today |
-| find_capture_gaps | Completed receipt intervals at least the requested duration, separately per feed | Yesterday's UTC midnight through query time |
-| rank_stations | Observed zero-count rates or lowest sampled availability for a Chicago hour | Up to seven recent completed Chicago dates; three completed dates by default |
-
-Historical availability and ranking read retained raw observations because the
-existing staging, snapshot and hourly views cover only the current UTC ingestion
-day. Queries are fixed and parameterized. Rates describe observed samples, not
-empty duration or future risk. Station-name resolution and forecasting are not
-implemented. See the [AI guide](ai/README.md) for the full tool contracts, limits,
-local setup, browser integration and evaluation status.
-
-The AI environment is separate from the collector and dbt environments. From the
-repository root:
-
-```bash
-cd ai
-env -u VIRTUAL_ENV uv sync --locked
-env -u VIRTUAL_ENV uv run --locked pytest -q
-env -u VIRTUAL_ENV uv run --locked ruff check .
-env -u VIRTUAL_ENV uv run --locked ruff format --check .
-env -u VIRTUAL_ENV uv run --locked mypy *.py tests
-env -u VIRTUAL_ENV uv run --locked python agent.py --list-tools
-```
-
-These checks and tool discovery do not call OpenAI or query BigQuery. Actual tool
-calls need local Google ADC; actual agent questions also need OPENAI_API_KEY in
-the terminal environment. API usage is billed separately from a ChatGPT plan.
-Keys, credentials and .env files must not be committed or displayed.
-
-For a live question, after those credentials are configured privately:
-
-```bash
-env -u VIRTUAL_ENV uv run --locked python agent.py \
-  "Were there any capture intervals of at least 30 minutes in the tool's recent UTC window?" \
-  --report ../data/evaluation/manual-gap-question-001.json
-```
-
-Use a new report filename: the agent refuses to overwrite an existing report
-before making a model request. Questions can use up to three model calls and two
-admitted tool calls. BigQuery guards remain per query/tool request, not a total
-monthly spending limit. Full run and local-browser instructions are in
-[ai/README.md](ai/README.md).
+dbt runs against BigQuery in its own environment; see the [dbt guide](dbt/README.md).
 
 ## Continuous integration
 
-GitHub Actions runs two workflows:
+GitHub Actions runs two workflows. Neither has cloud or OpenAI credentials, and
+deployment stays manual.
 
-- **CI**, on every push and pull request: Ruff, mypy and the offline pytest
-  suites for the collector and the AI project, the fixture demo, and Docker
-  builds of the collector, dbt-checker and agent images.
-- **Live feed check**, daily and on demand: the integration test above against
-  the real Divvy feeds, to catch upstream URL or schema changes.
-
-Neither workflow has Google Cloud or OpenAI credentials; deployment remains manual.
+- **CI**, on every push and pull request:
+  - Ruff, mypy and offline pytest for the collector and the AI project;
+  - the fixture demo;
+  - Docker builds and smoke tests of the collector, dbt-checker and agent images.
+- **Live feed check**, daily and on demand: the integration test against the
+  real Divvy feeds, to catch upstream URL or schema changes.
 
 ## Repository layout
 
 ```text
-.github/workflows/        CI and scheduled live-feed checks
-pyproject.toml            package metadata and tool configuration
-uv.lock                   dependency lockfile
-src/divvyai/              collection, archive, cloud loading, recovery and dbt runner
-tests/fixtures/           small synthetic station feed samples
-Dockerfile                collector container
-Dockerfile.dbt-checks     separate dbt checker container
-Dockerfile.agent          hosted agent API container
-config/dbt-checks/        cloud dbt connection settings, without credentials
-config/monitoring/        disabled alert-policy import template
-sql/verification/         bounded historical-capture verification queries
-sql/dashboard/            bounded dashboard export query
-dbt/                      separate uv project, five views and transformation checks
-ai/                       separate uv project, MCP tools, Strands agent and local API
-ai/README.md              tool contracts, private credentials, local browser and eval status
-docs/DEMO.md              offline demo and recorded hourly availability chart
-docs/assets/              saved demo CSV, chart and PDF
-docs/PROJECT_STATE.md      verified state, evidence and limitations
-docs/RUNBOOK.md            operation, replay, monitoring and teardown guidance
-docs/INCIDENT_*.md         investigated failures and evidence limits
+src/divvyai/          collector: fetch, archive, BigQuery load, replay, dbt check runner
+tests/                offline collector tests with synthetic fixtures
+ai/                   MCP server, Strands agent, hosted API and evaluation tools
+dbt/                  dbt project: five views, unit tests and data checks
+sql/                  verification and dashboard export queries
+config/               storage lifecycle, dbt checker profile, alert-policy template
+Dockerfile            collector image
+Dockerfile.dbt-checks hourly checker image
+Dockerfile.agent      hosted agent image
+docs/                 project state, runbook, demo walkthrough and incident report
+.github/workflows/    CI and the daily live-feed check
 ```
 
-## Cost, security, and data correctness
+## Design choices
 
-- Stay within available GCP free-tier allowances; trial credits do not count.
-- Billing budget alerts do not cap spending.
-- Document expected cost, permissions, and deletion for each cloud resource.
-- Use local user authentication and attached service accounts, without keys in Git.
-- The cloud dbt profile contains connection settings only; local credentials
-  and the personal dbt profile remain outside Git.
-- Offline Python tests and the fixture demo make no live-feed, model or cloud calls.
-- Real agent questions use OpenAI API credits and BigQuery; a ChatGPT subscription
-  does not cover calls made with this application's API key.
-- Agent/MCP queries use 256 MiB per-query limits; historical availability and
-  ranking additionally cap a tool request at 1 GiB. The agent can admit two
-  tool calls, so a tool-request cap is not an aggregate per-question cap.
-- The local web bridge binds loopback, accepts one active question and has a
-  100-second response timeout. A timeout does not cancel remote work; the active
-  slot stays occupied until the worker finishes. These are local protections,
-  not public authentication or a hosted spending cap.
-- dbt unit tests use synthetic inputs and execute on BigQuery.
-- The checker has query-job and scoped read access, without table-write access.
-- Its 256 MiB byte guard applies per query, not per run or month.
-- Preserve original bytes and receipt times; log successful warehouse completion.
-- Keep source time, receipt time and warehouse availability distinct.
-- Use only information available at prediction time when building future ML features.
-- Report only implemented capabilities and measured results.
+- **Cost.** The project is designed to stay within Google Cloud free-tier
+  allowances. It uses batch loads instead of streaming inserts, byte caps on
+  every query, scale-to-zero services and no always-on infrastructure. A
+  billing budget sends alerts but does not cap spending.
+- **Security.**
+  - Each job and the agent run as their own least-privilege service account.
+  - The agent's data tools are read-only.
+  - The OpenAI key is never passed to the process that talks to Google.
+  - No credentials or keys are in this repository; the tracked dbt profile
+    holds connection settings only.
+- **Honest numbers.** Hourly figures are averages of 15-minute samples, not
+  continuous measurements, and the tools return sample counts with them. Missing
+  or invalid samples are excluded rather than counted as zero.
 
-At the October 24 verification, the live failure policy was enabled with a
-configured email channel. The checked-in
-`config/monitoring/job-failure-alert.json` remains a disabled import template
-without a notification channel. Importing that file alone does not reproduce
-the live alert configuration; see the [runbook](docs/RUNBOOK.md).
+## Limitations
 
-See [project state](docs/PROJECT_STATE.md) and the
-[demo walkthrough](docs/DEMO.md) for details.
+- Forecasting is not implemented yet.
+- Collection runs on a schedule, but gap-free delivery is not guaranteed, and
+  uptime has not been measured.
+- The hosted agent has no per-person daily question limit or spending cap yet.
+  Access is invite-only.
+- The 19/20 benchmark covers 20 structured questions. It does not measure
+  accuracy across arbitrary questions.
+- The dbt views read a recent window, the current UTC day for most of them.
+  The agent's historical tools read retained raw data instead.
+
+## Documentation
+
+- [Project state](docs/PROJECT_STATE.md): what is implemented, configuration and evidence
+- [AI guide](ai/README.md): tool contracts, agent setup, reports and evaluation
+- [dbt guide](dbt/README.md): models, checks and scheduled execution
+- [Runbook](docs/RUNBOOK.md): operations, recovery, alerts and teardown
+- [Demo walkthrough](docs/DEMO.md): a guided tour with recorded results
+- [Incident report](docs/INCIDENT_2026-10-18_IMAGE_IMPORT.md): the October 18 missed collection
+
+## Built with
+
+Python 3.12 · uv · pytest · Ruff · mypy · Google Cloud (Cloud Run, Cloud
+Scheduler, Cloud Storage, BigQuery, Cloud Monitoring, Secret Manager, Artifact
+Registry) · dbt · MCP · Strands Agents · OpenAI · Docker · GitHub Actions ·
+Vercel · Firebase
 
 ## License
 
@@ -289,14 +237,3 @@ Copyright (c) 2026 Nick Vivarelli. All rights reserved.
 
 This repository is public for viewing only. No permission is granted to copy,
 modify, distribute or reuse the code. See [LICENSE](LICENSE).
-
-## References
-
-- [Divvy system data](https://divvybikes.com/system-data)
-- [Divvy GBFS discovery](https://gbfs.divvybikes.com/gbfs/gbfs.json)
-- [GBFS specification](https://gbfs.org/documentation/reference/)
-- [GCP free-tier documentation](https://docs.cloud.google.com/free/docs/free-cloud-features)
-- [Cloud Run pricing](https://cloud.google.com/run/pricing)
-- [Cloud Storage pricing](https://cloud.google.com/storage/pricing)
-- [BigQuery pricing](https://cloud.google.com/bigquery/pricing)
-- [uv project documentation](https://docs.astral.sh/uv/concepts/projects/)
