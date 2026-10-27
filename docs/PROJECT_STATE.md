@@ -32,11 +32,12 @@ service-account keys are used. A browser answer from the hosted website matched
 the SQL reference, and a question was answered from a phone while the Mac was
 off.
 
-The model-testing page is public at divvyai-weld.vercel.app but invite-only.
-Visitors log in with Firebase email and password, must confirm their email and
-must be on a Firestore allow list. The website's server function checks this
-before any Google credential, model or warehouse call. No per-person daily
-question limit or durable spending cap exists yet.
+The model-testing page is public at https://divvyai.bike but invite-only; the
+earlier divvyai-weld.vercel.app address still works. Visitors log in with
+Firebase email and password, must confirm their email and must be on a
+Firestore allow list. The website's server function checks this before any
+Google credential, model or warehouse call. No per-person daily question limit
+or durable spending cap exists yet.
 
 ## Implemented
 
@@ -101,14 +102,15 @@ question limit or durable spending cap exists yet.
   cases matched the expected tools/arguments, SQL results and final answers.
   The remaining attempt recorded an API timeout after 60.65 seconds.
 
-In the separate DivvyAI-Website repository (main at e60b50b):
+In the separate DivvyAI-Website repository (main at 6e5a7ac):
 
 - api/agent.mjs, a Vercel function for same-origin POST /api/agent. It checks
   the deployment, address, method, origin and question; checks the visitor's
   Firebase login and allow-list entry; exchanges the deployment's Vercel OIDC
   token for a Google ID token; sends one request to Cloud Run; and relays the
   agent's JSON unchanged. It never retries or caches, and never logs questions,
-  emails or tokens.
+  emails or tokens. Allowed addresses: preview URLs, and divvyai.bike and
+  divvyai-weld.vercel.app on production.
 - vercel.json enabling Fluid compute with a 120-second limit for the function.
 - Firebase email/password login on model-testing.html (js/account.js,
   js/account-core.js), with email confirmation, password reset and an
@@ -222,13 +224,20 @@ HTTP 200 launch acceptance does not prove that a job completed successfully.
 
 Website hosting (Vercel project divvyai, team nicola-vivarellis-projects):
 
-- Production address: divvyai-weld.vercel.app, deployed from main.
+- Production addresses: divvyai.bike (main) and divvyai-weld.vercel.app, both
+  deployed from main. www.divvyai.bike redirects to divvyai.bike (308).
+- Domain divvyai.bike registered at Namecheap on 2026-10-26; a paid annual
+  registration outside GCP whose renewal price is not recorded here. DNS stays
+  at Namecheap: A @ 216.198.79.1 and CNAME www to
+  8d94ee5d8f52d201.vercel-dns-017.com. Vercel issues the HTTPS certificate.
 - Vercel Authentication with Standard Protection: preview deployments require a
-  Vercel login; the production address is public.
+  Vercel login; the production addresses are public.
 - OIDC Federation with the team issuer
   https://oidc.vercel.com/nicola-vivarellis-projects.
-- The function runs only on preview URLs and on divvyai-weld.vercel.app. Other
-  production aliases, custom domains and development are refused.
+- The function runs only on preview URLs, divvyai.bike and
+  divvyai-weld.vercel.app. www.divvyai.bike, other production aliases, other
+  custom domains and development are refused. The Google federation checks the
+  Vercel environment, not the address, so the domain needed no Google change.
 - The Vercel plan and its included usage were not re-checked.
 
 Login project (Firebase), separate from divvy-ai:
@@ -237,16 +246,17 @@ Login project (Firebase), separate from divvy-ai:
   billing account.
 - Firebase Authentication with email/password; email-link sign-in is off.
   Authorized domains: localhost, divvyai-dc6ef.firebaseapp.com,
-  divvyai-dc6ef.web.app, the agent-proxy preview alias and
-  divvyai-weld.vercel.app.
+  divvyai-dc6ef.web.app, the agent-proxy preview alias,
+  divvyai-weld.vercel.app and divvyai.bike.
 - Firestore (default) database in us-central1, Native mode, Standard edition.
   Collection agent_access/{lowercase email} holds allowed: true | false.
 - Published rules: a logged-in person with a confirmed email may read only
   their own entry; nobody can write from the website. Copy in Git:
   DivvyAI-Website/firestore.rules.
-- Browser API key restricted to the preview alias, divvyai-weld.vercel.app and
-  divvyai-dc6ef.firebaseapp.com, and to the Identity Toolkit and Token Service
-  APIs.
+- Browser API key restricted to the preview alias, divvyai-weld.vercel.app,
+  divvyai.bike and divvyai-dc6ef.firebaseapp.com, and to the Identity Toolkit
+  and Token Service APIs. The API Keys API was enabled only to add divvyai.bike
+  and then disabled again.
 - Google Analytics is linked to the Firebase project; the website does not load it.
 - Firebase's own service account was created automatically; no key was generated.
 
@@ -645,6 +655,25 @@ These checks accept the hosted path and access control for the questions shown.
 They do not establish per-person usage limits, measured availability or
 production-wide answer accuracy.
 
+### Custom domain: October 26
+
+- Public DNS returned 216.198.79.1 for divvyai.bike and the Vercel CNAME for
+  www.divvyai.bike. Vercel listed both domains as verified.
+- https://divvyai.bike/ and /model-testing.html returned 200 with a valid
+  certificate. http://divvyai.bike/ and https://www.divvyai.bike/ redirected
+  (308) to https://divvyai.bike/.
+- The production deployment of DivvyAI-Website commit 6e5a7ac was READY. On
+  divvyai.bike, POST /api/agent without the page's headers returned 403
+  ("Questions must come from this site's model-testing page"); with them but
+  without a login it returned LOGIN_REQUIRED.
+- The Firebase browser key accepted requests with a divvyai.bike or
+  divvyai-weld.vercel.app referer and refused another site (403).
+- An allow-listed account logged in at https://divvyai.bike/model-testing.html
+  and received an answer. That answer was not compared with a SQL reference.
+- Website offline checks with the change applied: 44/44 unit tests and 93/93
+  headless-browser checks, run on a working tree that also held uncommitted
+  homepage changes.
+
 ### Investigated collection gap
 
 Execution divvyai-collector-jzlw7 was launched for the October 18 16:45 UTC slot.
@@ -698,6 +727,11 @@ by this report. See INCIDENT_2026-10-18_IMAGE_IMPORT.md for the timeline.
   fail once.
 - Preview deployments from any branch can use the agent, behind Vercel's login
   and the allow list.
+- divvyai.bike is the main public address; www.divvyai.bike only redirects.
+  The function, Firebase authorized domains and browser key allow divvyai.bike
+  but not www, so reversing the Vercel redirect would break login and the agent
+  on the custom domain. divvyai-weld.vercel.app still works and is not
+  redirected.
 
 ## Not implemented
 
