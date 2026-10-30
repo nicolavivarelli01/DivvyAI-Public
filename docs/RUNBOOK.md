@@ -102,8 +102,8 @@ env -u VIRTUAL_ENV uv run --locked python agent.py --list-tools
 
 Tests and discovery do not submit live model or warehouse requests. The local
 server, tests, direct Starlette/uvicorn dependencies and lockfile update are
-committed. The current AI checkout passed 160 offline tests, Ruff, formatting
-and strict mypy for 24 Python files on October 25.
+committed. The current AI checkout passed 189 offline tests, Ruff, formatting
+and strict mypy for 29 Python files on October 28.
 
 ### Credentials and live questions
 
@@ -183,8 +183,9 @@ Normal Ctrl+C shutdown can wait for the current worker and SDK cleanup. Temporar
 API reports are deleted after use, while CLI --report files remain at their chosen
 paths. Browser conversation history is held in the tab and cleared on reload.
 
-The current AI checkout passed 160 offline tests plus Ruff, formatting and strict
-mypy for 24 Python files on October 25. The website client also accepted the
+At the October 25 checkpoint the AI checkout passed 160 offline tests plus
+Ruff, formatting and strict mypy for 24 Python files. The website client also
+accepted the
 API-shaped recorded availability report in an earlier offline check. Live CLI
 answers and the initial 20-question benchmark are verified. The supplied live
 browser screenshot also confirmed one successful availability answer: station
@@ -212,26 +213,57 @@ references use 256 MiB. Production tool limits remain 256 MiB per query and
 1 GiB per historical/ranking request. eval_finish.py requires explicit
 --execute and a new output directory; it does not retry failed model calls.
 
-The local browser availability check above has passed. The next step is to
-define the hosted audience and implement server-side access/request and usage
-controls before deployment. Keep the initial benchmark and browser checkpoint
-as separate evidence; a later recovery check does not replace the 95% result.
+The local browser availability check above has passed. Keep the initial
+benchmark and browser checkpoint as separate evidence; a later recovery check
+does not replace the 95% result.
 
-### Hosted agent: not deployed
+### Prompt-injection evaluation and CI
 
-Publishing the website does not move the agent from the Mac. The intended hosted
-path is Vercel page -> Python API/Strands/MCP in a separate Cloud Run service ->
-OpenAI and BigQuery -> website answer. A service receives web requests; the
-collector/checker jobs remain scheduled work. The existing model runs at OpenAI,
-not inside a new GCP model-training deployment.
+The injection evaluation uses a synthetic MCP server and needs only
+OPENAI_API_KEY. It makes paid model calls (cents per run):
 
-Before public hosting: preserve the accepted browser checkpoint and initial
-benchmark limitations, implement access/request and spending controls, review
-cost/scoped permissions, package the Python service, then connect Vercel routing
-and verify a request with the Mac off. No agent image, cloud service, hosted
-identity, secret configuration or Vercel API routing is deployed yet. Do not use
-the local-only entry point as a public service or remove its guard to bypass that
-work. Cloud Run cold/warm request latency has not been measured for this agent.
+```bash
+cd ai
+env -u VIRTUAL_ENV uv run --locked python eval_injection.py --execute \
+  --output ../data/evaluation/injection-run-NEW --repeats 3
+```
+
+The output directory must be new. The command exits with code 1 below the
+fixed 80% pass rate. The last line reports attempts passed, cases x runs and
+cases that passed every run.
+
+GitHub Actions runs .github/workflows/ci.yml (offline checks for both projects,
+the fixture demo and container builds) on every push to main and every pull
+request, and .github/workflows/live-feeds.yml daily.
+.github/workflows/injection-eval.yml (the evaluation with --repeats 3) is
+manual-only in this public repository, and no API key is configured here. Add
+the secret below first, then run the evaluation and read its score:
+
+```bash
+gh workflow run "Prompt-injection eval"
+gh run list --limit 5
+gh run view RUN_ID --log | grep "attempts passed"
+```
+
+Per-attempt reports are in each run's injection-run artifact. The key is the
+OPENAI_API_KEY repository secret; replace it with `gh secret set OPENAI_API_KEY`
+and revoke the old key at OpenAI. To stop paid CI runs, disable the workflow:
+`gh workflow disable "Prompt-injection eval"`.
+
+The first 3x CI run, in the private development repository, passed 59/60
+attempts (98%); 19/20 cases passed every run. Failed runs do not block merges.
+
+### Hosted agent: deployed October 26
+
+The hosted path is the divvyai.bike model-testing page -> server-side Vercel
+function -> the private Cloud Run service divvyai-agent (hosted_web.py) ->
+OpenAI and BigQuery. The function authenticates with Vercel OIDC and Google
+Workload Identity Federation; no service-account keys are used. Access is
+invite-only through Firebase login and a Firestore allow list. A hosted answer
+matched the SQL reference with the Mac off. Settings, identities and evidence
+are recorded in [PROJECT_STATE.md](PROJECT_STATE.md); step-by-step hosted
+operations are not yet documented here. Do not use the local-only entry point
+as a public service. Cloud Run cold/warm request latency has not been measured.
 
 ## Scheduled collection and manual execution
 

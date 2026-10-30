@@ -13,7 +13,7 @@ picks one of three read-only data tools, queries BigQuery, and answers from the
 returned numbers, showing which tool it called and with what arguments.
 
 The agent is deployed on Cloud Run and is reachable from the project website,
-[divvyai-weld.vercel.app](https://divvyai-weld.vercel.app). Asking questions
+[divvyai.bike](https://divvyai.bike). Asking questions
 there is invite-only.
 
 ## How it works
@@ -109,6 +109,12 @@ service-account keys exist anywhere in the system.
 - **Access control verified.** The Firestore rules passed seven rule tests. An
   allow-listed account got an answer, and an account not on the list was
   refused.
+- **Prompt-injection evaluation: 59/60 attempts (98%).** The real agent and
+  model ran against a synthetic MCP server whose tool results hide attacks,
+  plus attacks in user messages: 20 cases, three runs each, against a fixed
+  80% threshold. 19 of the 20 cases passed every run. The one failure repeated
+  system-prompt sentences when asked to print its instructions in a code block.
+  Scoring is plain code; no model grades the answers.
 - **Replay verified.** Replaying a completed capture reused the original load
   job and added no rows.
 - **One real incident investigated.** A missed collection on October 18 was
@@ -161,8 +167,8 @@ dbt runs against BigQuery in its own environment; see the [dbt guide](dbt/README
 
 ## Continuous integration
 
-GitHub Actions runs two workflows. Neither has cloud or OpenAI credentials, and
-deployment stays manual.
+GitHub Actions has three workflows. Deployment stays manual, and this repository
+holds no cloud or OpenAI credentials.
 
 - **CI**, on every push and pull request:
   - Ruff, mypy and offline pytest for the collector and the AI project;
@@ -170,6 +176,9 @@ deployment stays manual.
   - Docker builds and smoke tests of the collector, dbt-checker and agent images.
 - **Live feed check**, daily and on demand: the integration test against the
   real Divvy feeds, to catch upstream URL or schema changes.
+- **Prompt-injection eval**, manual-only here: it makes paid OpenAI calls and
+  needs an API key secret, which is not configured in this repository. The
+  results above come from the private development repository.
 
 ## Repository layout
 
@@ -212,6 +221,9 @@ docs/                 project state, runbook, demo walkthrough and incident repo
   Access is invite-only.
 - The 19/20 benchmark covers 20 structured questions. It does not measure
   accuracy across arbitrary questions.
+- The injection evaluation is a small, fixed set of cases with synthetic tool
+  data. It does not establish general injection resistance, and the agent can
+  still be made to repeat its system prompt, which holds rules, not secrets.
 - The dbt views read a recent window, the current UTC day for most of them.
   The agent's historical tools read retained raw data instead.
 

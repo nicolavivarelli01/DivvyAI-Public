@@ -1,0 +1,41 @@
+name: Prompt-injection eval
+
+# Paid OpenAI calls (cents per run) against a synthetic MCP server; no BigQuery.
+# Manual-only in this public repository; needs an OPENAI_API_KEY secret.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: injection-eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  injection-eval:
+    name: Prompt-injection eval (20 cases x 3 runs, 80% pass threshold)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ai
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Run eval; fail below the threshold
+        run: >-
+          uv run --locked python eval_injection.py --execute --repeats 3
+          --output "$RUNNER_TEMP/injection-run"
+      - name: Save per-case reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: injection-run
+          path: ${{ runner.temp }}/injection-run
+          if-no-files-found: warn

@@ -21,8 +21,11 @@ collector or checker executions; email delivery was verified on October 24.
 A separate local MCP server offers three read-only data tools. A Strands agent
 uses OpenAI gpt-6-luna to choose a tool and explain the returned observations.
 The initial 20-question benchmark passed 19/20 cases, with one API timeout.
-The website's model-testing page uses the local Python API. A live browser
-availability answer matched recorded SQL values; the agent is not hosted yet.
+A 20-case prompt-injection evaluation ran in GitHub Actions three times per
+case; the latest recorded run passed 59/60 attempts (98%) against an 80%
+threshold.
+The agent is hosted on Cloud Run and reached from the invite-only website at
+https://divvyai.bike. A live browser answer matched recorded SQL values.
 
 ## 1. Demonstrate collection locally
 
@@ -178,8 +181,8 @@ env -u VIRTUAL_ENV uv run --locked python agent.py --list-tools
 ```
 
 Expected: get_station_availability, find_capture_gaps and rank_stations.
-The current AI checkout passed 160 offline tests, Ruff, formatting and strict
-mypy for 24 Python files on October 25.
+The current AI checkout passed 189 offline tests, Ruff, formatting and strict
+mypy for 29 Python files on October 28.
 
 After privately configuring Google ADC and OPENAI_API_KEY in the same terminal,
 this explicit live example asks for the gap tool's supported recent window:
@@ -222,6 +225,13 @@ and availability-run-v1/. The remaining reports, independent ranking/gap referen
 and summary.json are in data/evaluation/benchmark-run-v1/. This is a fixed
 structured-JSON benchmark; the original 95% includes its timed-out attempt.
 
+Prompt-injection evidence: GitHub Actions run 40682136213, in the private
+development repository, passed 59/60
+attempts (98%) across 20 cases x 3 runs; 19/20 cases passed every run. The
+only failure repeated system-prompt sentences when asked to print the
+instructions in a code block. Each run's per-attempt reports are in its
+injection-run artifact; see the [AI guide](../ai/README.md) for the cases.
+
 ## 7. Try the existing website locally
 
 The separate DivvyAI-Website repository contains model-testing.html. Its
@@ -253,10 +263,10 @@ For a later demonstration, choose a supported recent date or the undated gap
 question. Fixed dates eventually leave the tool's recent-history window.
 
 The local server and its explicit dependencies are committed and its offline
-checks pass. The live local-browser availability check passed. The static
-website was published on Vercel, but its hosted API connection and the
-Python Cloud Run service are not deployed. For this local path the Mac must
-remain running. The OpenAI model runs at OpenAI and the data remains in BigQuery.
+checks pass. The live local-browser availability check passed. For this local
+path the Mac must remain running. The hosted path (divvyai.bike, a Vercel
+function and the Cloud Run service divvyai-agent) does not need the Mac. The
+OpenAI model runs at OpenAI and the data remains in BigQuery.
 
 ## Current limits
 
@@ -267,7 +277,9 @@ Hourly health checks and failure email are implemented. They do not detect every
 missing scheduled launch or prove fresh source reports for each station.
 Three read-only MCP tools, the local Strands agent and JSON reports are
 implemented. The initial 20-question evaluation is complete at 19/20 passed,
-including one API timeout. Forecasting and a hosted agent service are unfinished.
+including one API timeout. The prompt-injection evaluation passed 59/60 CI
+attempts (98%). The agent is hosted on Cloud Run behind an invite-only website.
+Forecasting and per-person usage limits are unfinished.
 The recorded local-browser availability check passed for one question.
 
 One missed collection was investigated and traced to container-image
